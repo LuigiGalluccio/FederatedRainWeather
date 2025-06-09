@@ -4,7 +4,7 @@ FederatedWeather is a machine learning project focused on weather forecasting us
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 FederatedWeather/
