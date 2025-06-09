@@ -48,8 +48,6 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Perfetto, allora aggiungiamo una sezione **"Run the Project"** chiara e divisa in due parti: **with** e **without Federated Learning**. Ecco una versione professionale da inserire nel README.
-
 ### **Run the Project**
 
 You can run the project in two modes: **standard training** (non-federated) and **federated learning**.
