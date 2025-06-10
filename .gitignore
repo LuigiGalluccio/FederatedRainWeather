@@ -101,6 +101,6 @@ env.bak/
 venv.bak/
 
 ### Data ###
-*.csv
+# *.csv
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode,venv,macos,jupyternotebooks
