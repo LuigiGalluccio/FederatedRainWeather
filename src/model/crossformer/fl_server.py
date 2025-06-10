@@ -26,6 +26,6 @@ fl.server.start_server(
         min_available_clients=4,
         fit_metrics_aggregation_fn=weighted_average,
         evaluate_metrics_aggregation_fn=weighted_average,
-        proximal_mu= 0.6
+        proximal_mu=0.6
     ),
 )
