@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 import yaml
 
-
 class myTransformer(nn.Module):
     def __init__(self, input_dim, output_dim, d_model=64, nhead=4, num_layers=2, dropout=0.1):
         super().__init__()
@@ -23,7 +22,6 @@ class myTransformer(nn.Module):
     def forward(self, source, target):
         source = self.input_linear(source)
         target = self.input_linear(target)
-
         source = self.pos_encoder(source)
         target = self.pos_encoder(target)
         out = self.transformer(source, target)
