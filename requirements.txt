@@ -1,0 +1,11 @@
+colorama
+python-dotenv
+requests
+numpy
+pandas
+scikit-learn
+torch
+transformers
+matplotlib
+flwr
+seaborn
