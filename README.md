@@ -1,6 +1,6 @@
 # Federated Learning for Distributed Weather Forecasting: A Practical Approach on Real Multidimensional Georeferenced Data
 
-FederatedWeather is a machine learning project focused on weather forecasting using federated learning techniques and transformer-based models. This project aims to preprocess distributed weather datasets, train models in a decentralized setting, and evaluate their performance.
+In this work, we explore a federated learning framework designed for collaborative weather forecasting using distribuited meteorological data. By combining edge computing, privacy-preserving learning and advanced deep learning architectures such as Transformers and Crossformers, we demonstrate improved prediction performance while maintaining data confidentiality and reducing communication overhead.
 
 ---
 
@@ -32,7 +32,7 @@ To set up and run the project locally, follow these steps:
 ### 1. Enter the repository
 
 ```bash
-cd FederatedWeather
+cd FederatedWeatherCC
 ```
 
 ### 2. Create and Activate a Virtual Environment
@@ -47,23 +47,39 @@ source venv/bin/activate
 ```bash
 pip install -r requirements.txt
 ```
+## Dataset layout
+Inside the directory:
+```bash
+cd data/processed_data/
+```
+the dataset includes **seven features**:
+* ```datetime```
+* ```station_id```
+* ```temperature```
+* ```humidity```
+* ```wind_speed```
+* ```wind_sin```
+* ```wind_cos```
 
-### **Run the Project**
+```wind_sin``` and ```wind_cos``` represent a sinusoidal encoding of wind direction
+## Training Example
 
-You can run the project in two modes: **standard training** (non-federated) and **federated learning**.
+Models can be trained in two different modes:
+* **standard (non-federated) training**
+* **federated learning**
 
 ---
 
-#### Without Federated Learning
+#### Standard training
 
-To run a standard training session (without federated learning):
+To run a standard training (non-federated) training session:
 
-1. Navigate to the desired model directory:
+1. Navigate to the directory of the model you want to train:
 
-   * `src/model/transformer/` for the Transformer-based model
-   * `src/model/crossformer/` for the Crossformer-based model
+   * `src/model/transformer/` for the Transformer model
+   * `src/model/crossformer/` for the Crossformer model
 
-2. Run `train.py`:
+2. Launch the training script:
 
 ```bash
 cd src/model/transformer  # or src/model/crossformer
@@ -74,14 +90,14 @@ python train.py
 
 #### With Federated Learning
 
-To run the project using Federated Learning:
+To run the project in a federated learning setting:
 
-1. Open **multiple terminal windows** (one for the server, and one for each client).
+1. Open **multiple terminal windows** - one for the server, and one for each client, with a minimum of 4 clients.
 
-2. In each terminal, navigate to either:
+2. In every terminal, navigate to the directory of the model you want to use:
 
    * `src/model/transformer/`
-   * or `src/model/crossformer/`
+   * `src/model/crossformer/`
 
 3. In the **first terminal**, start the federated learning **server**:
 
@@ -90,9 +106,9 @@ cd src/model/transformer  # or src/model/crossformer
 python server.py
 ```
 
-4. In the **other terminals**, start one or more **clients**:
+4. In the **clients terminals**, launch a**client** for each terminal:
 
 ```bash
 cd src/model/transformer  # or src/model/crossformer
-python client.py
+python client.py <place_id> <server_address> # python client.py <id> localhost:8081
 ```
