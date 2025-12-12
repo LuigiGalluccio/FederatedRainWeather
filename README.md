@@ -1,4 +1,4 @@
-# FederatedWeather
+# Federated Learning for Distributed Weather Forecasting: A Practical Approach on Real Multidimensional Georeferenced Data
 
 FederatedWeather is a machine learning project focused on weather forecasting using federated learning techniques and transformer-based models. This project aims to preprocess distributed weather datasets, train models in a decentralized setting, and evaluate their performance.
 
