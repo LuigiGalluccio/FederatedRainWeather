@@ -22,16 +22,16 @@ def load_config(config_path="config.yaml"):
     with open(config_path, "r") as file:
         return yaml.safe_load(file)
     
-df_10min = load_weather_data(base_path="../../../data/storage/vantage-pro-ws1/2025", downsample_factor=60, station_id=1)
+# df_10min = load_weather_data(base_path="../../../data/storage/vantage-pro-ws1/2025", downsample_factor=60, station_id=1)
 
-df_10min = []
-for i in range(4):
-    df = load_weather_data(
-        base_path=f"../../../data/storage/vantage-pro-ws{i+1}/2025",
-        downsample_factor=60,
-        station_id=i + 1
-    )
-    df_10min.append(df)
+stations = [1, 3, 4, 5]
+dfs = []
+
+for s in stations:
+    path = f"../../../data/storage/vantage-pro-ws{s}/2025"
+    dfs.append(load_weather_data(base_path=path, downsample_factor=60, station_id=s))
+
+df_10min = pd.concat(dfs, axis=0)
 
 
 def load_data(config):
