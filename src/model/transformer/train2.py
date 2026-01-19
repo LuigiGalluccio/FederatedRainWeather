@@ -30,6 +30,7 @@ dfs = []
 for s in stations:
     path = f"../../../data/storage/vantage-pro-ws{s}/2025"
     dfs.append(load_weather_data(base_path=path, downsample_factor=60, station_id=s))
+    print(f"Loaded data for station {s}, shape: {dfs[-1].shape}")
 
 df_10min = pd.concat(dfs, axis=0)
 
