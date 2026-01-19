@@ -2,16 +2,17 @@
 data:
   csv_path: "../../../data/processed_data/dataset.csv"
   feature_cols:
-    - station_id
-    - temperature
-    - humidity
-    - wind_speed
-    - wind_sin
-    - wind_cos
+    - Barometer
+    - TempIn
+    - HumIn
+    - TempOut
+    - WindSpeed
+    - WindDir
+    - HumOut
   target_cols:
-    - temperature
-  input_window: 20 # hours
-  output_window: 2 # hours
+    - RainRate
+  input_window: 12 # steps
+  output_window: 6 # steps
 
 training:
   batch_size: 16
