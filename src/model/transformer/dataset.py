@@ -17,7 +17,7 @@ class Dataset(Dataset):
         self.target_cols = target_cols
         self.input_window = input_window
         self.output_window = output_window
-
+        
         if end_idx is None:
             end_idx = len(self.data)
         self.data = self.data[start_idx:end_idx]

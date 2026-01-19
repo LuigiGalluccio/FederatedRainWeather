@@ -94,7 +94,7 @@ class WeatherDataset(Dataset):
 
 
 
-def load_weather_data(base_path="storage/vantage-pro/2025", downsample_factor=60, place_id=1):
+def load_weather_data(base_path="storage/vantage-pro/2025", downsample_factor=60, station_id=None):
     """
     Carica tutti i CSV divisi per mese, unisce in un unico DataFrame,
     filtra le righe con RainRate > 0 e fa downsampling ogni 10 minuti.
@@ -116,6 +116,10 @@ def load_weather_data(base_path="storage/vantage-pro/2025", downsample_factor=60
 
     full_df = pd.concat(all_dfs, ignore_index=True)
     full_df['Datetime'] = pd.to_datetime(full_df['Datetime'])
+
+    if station_id is not None:
+        full_df["station_id"] = station_id
+        
     full_df = full_df.sort_values('Datetime').reset_index(drop=True)
 
     # Filtra solo righe con pioggia
