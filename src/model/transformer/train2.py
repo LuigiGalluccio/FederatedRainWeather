@@ -13,7 +13,7 @@ import glob
 from dataset2 import WeatherDataset, load_weather_data
 from model import myTransformer
 
-df_10min = load_weather_data(base_path="storage/vantage-pro/2025", downsample_factor=60)
+df_10min = load_weather_data(base_path="../../data/storage/vantage-pro-ws1/2025", downsample_factor=60)
 
 dataset = WeatherDataset(
     df=df_10min,
