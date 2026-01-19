@@ -94,7 +94,7 @@ class WeatherDataset(Dataset):
 
 
 
-def load_weather_data(base_path="storage/vantage-pro/2025", downsample_factor=60):
+def load_weather_data(base_path="storage/vantage-pro/2025", downsample_factor=60, place_id=1):
     """
     Carica tutti i CSV divisi per mese, unisce in un unico DataFrame,
     filtra le righe con RainRate > 0 e fa downsampling ogni 10 minuti.

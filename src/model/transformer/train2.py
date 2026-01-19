@@ -21,8 +21,10 @@ def load_config(config_path="config.yaml"):
     """load YAML config file."""
     with open(config_path, "r") as file:
         return yaml.safe_load(file)
-
-df_10min = load_weather_data(base_path="../../../data/storage/vantage-pro-ws1/2025", downsample_factor=60)
+    
+for i in range(4):
+    # df_10min = load_weather_data(base_path=f"../../../data/storage/vantage-pro-ws{i+1}/2025", downsample_factor=60, place_id=i+1)
+    print(i+1)
 
 
 def load_data(config):
