@@ -10,7 +10,7 @@ import pandas as pd
 import logging as log
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import glob
-from dataset2 import WeatherDataset, load_weather_data
+from dataset import load_weather_data, WeatherDataset, preprocess_weather_data
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../utils')))
 from logger import Logger
@@ -23,7 +23,7 @@ def load_config(config_path="config.yaml"):
         return yaml.safe_load(file)
     
 # df_10min = load_weather_data(base_path="../../../data/storage/vantage-pro-ws1/2025", downsample_factor=60, station_id=1)
-
+# print(df_10min)
 stations = [1, 3, 4, 5]
 dfs = []
 
@@ -32,8 +32,10 @@ for s in stations:
     dfs.append(load_weather_data(base_path=path, downsample_factor=60, station_id=s))
     print(f"Loaded data for station {s}, shape: {dfs[-1].shape}")
 
-df_10min = pd.concat(dfs, axis=0)
+df_raw = pd.concat(dfs, axis=0).reset_index(drop=True)
+df_10min, scaler = preprocess_weather_data(df_raw)
 
+print(df_10min.head())
 
 def load_data(config):
 

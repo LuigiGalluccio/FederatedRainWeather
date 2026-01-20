@@ -4,6 +4,8 @@ import glob
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
+from sklearn.preprocessing import StandardScaler
+import numpy as np
 
 # class WeatherDataset(Dataset):
 #     def __init__(self, df, input_window, output_window, feature_cols, target_col="RainRate"):
@@ -126,5 +128,28 @@ def load_weather_data(base_path="storage/vantage-pro/2025", downsample_factor=60
     df_rain = full_df[full_df['RainRate'] > 0].reset_index(drop=True)
 
     # Downsampling ogni 'downsample_factor' righe (10 minuti)
-    df_10min = df_rain.iloc[::downsample_factor].reset_index(drop=True)
-    return df_10min
+    return df_rain.iloc[::downsample_factor].reset_index(drop=True)
+
+
+
+def preprocess_weather_data(df,scaler=None):
+
+    df = df.copy()
+
+    wind_rad = df['WindDir'] * np.pi / 180.0
+    df['WindDir_sin'] = np.sin(wind_rad)
+    df['WindDir_cos'] = np.cos(wind_rad)
+    df = df.drop(columns=['WindDir'])
+
+    cols_to_normalize = [
+        'Barometer', 'TempIn', 'HumIn', 'TempOut', 
+        'WindSpeed', 'HumOut', 'WindDir_sin', 'WindDir_cos','RainRate'
+    ]
+
+    if scaler is None:
+        scaler = StandardScaler()
+        df[cols_to_normalize] = scaler.fit_transform(df[cols_to_normalize])
+    else:
+        df[cols_to_normalize] = scaler.transform(df[cols_to_normalize]) 
+
+    return df, scaler

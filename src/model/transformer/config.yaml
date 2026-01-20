@@ -7,11 +7,12 @@ data:
     - HumIn
     - TempOut
     - WindSpeed
-    - WindDir
     - HumOut
+    - WindDir_sin
+    - WindDir_cos
   target_cols:
     - RainRate
-  input_window: 12 # steps
+  input_window: 24 # steps
   output_window: 6 # steps
 
 training:
