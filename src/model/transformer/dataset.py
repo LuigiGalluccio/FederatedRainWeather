@@ -97,47 +97,42 @@ class WeatherDataset(Dataset):
 
 
 def load_weather_data(base_path="storage/vantage-pro/2025", downsample_factor=60, station_id=None):
-    """
-    Carica tutti i CSV divisi per mese, unisce in un unico DataFrame,
-    filtra le righe con RainRate > 0 e fa downsampling ogni 10 minuti.
-    """
     month_folders = sorted(glob.glob(os.path.join(base_path, "*")))
     all_dfs = []
 
     for month_folder in month_folders:
         csv_files = sorted(glob.glob(os.path.join(month_folder, "*.csv")))
-        if len(csv_files) == 0:
-            print(f"Warning: nessun CSV trovato in {month_folder}")
-            continue
+        if not csv_files: continue
         for csv_file in csv_files:
-            df = pd.read_csv(csv_file)
-            all_dfs.append(df)
+            all_dfs.append(pd.read_csv(csv_file))
 
-    if len(all_dfs) == 0:
-        raise ValueError("Nessun CSV trovato! Controlla il path.")
+    if not all_dfs:
+        raise ValueError("Nessun CSV trovato!")
 
-    full_df = pd.concat(all_dfs, ignore_index=True)
-    full_df['Datetime'] = pd.to_datetime(full_df['Datetime'])
-
+    df = pd.concat(all_dfs, ignore_index=True)
+    df['Datetime'] = pd.to_datetime(df['Datetime'])
     if station_id is not None:
-        full_df["station_id"] = station_id
+        df["station_id"] = station_id
         
-    full_df = full_df.sort_values('Datetime').reset_index(drop=True)
+    df = df.sort_values('Datetime').reset_index(drop=True)
 
-    # Filtra solo righe con pioggia
-    # df_rain = full_df[full_df['RainRate'] > 0].reset_index(drop=True)
-    full_df['RainRate'] = full_df['RainRate'].clip(lower=0.0)
-    full_df['RainRate'] = full_df['RainRate'].apply(lambda x: 0 if x < 0.1 else x)
-    full_df['RainRate'] = np.log1p(full_df['RainRate'])
+    # 1. Pulizia e Log-Transform
+    df['RainRate'] = df['RainRate'].clip(lower=0.0)
+    # Applichiamo una soglia di rumore (es. 0.1 mm/h)
+    df['RainRate'] = df['RainRate'].apply(lambda x: 0.0 if x < 0.1 else x)
+    # Log-transform: schiaccia i valori alti e riduce la varianza della Loss
+    df['RainRate'] = np.log1p(df['RainRate'])
 
-    df_zero = full_df[full_df['RainRate'] == 0].sample(frac=0.33)
-    df_rain = full_df[full_df['RainRate'] > 0]
-    full_df = pd.concat([df_zero, df_rain]).sort_values('Datetime')
+    # 2. Bilanciamento Classi (Sottocampionamento degli zeri)
+    df_zero = df[df['RainRate'] == 0].sample(frac=0.33, random_state=42)
+    df_rain = df[df['RainRate'] > 0]
+    
+    # Uniamo e riordiniamo per tempo (fondamentale per i Transformer)
+    df_balanced = pd.concat([df_zero, df_rain]).sort_values('Datetime')
 
-
-
-    # Downsampling ogni 'downsample_factor' righe (10 minuti)
-    return df_rain.iloc[::downsample_factor].reset_index(drop=True)
+    # 3. Downsampling 
+    # Usiamo il dataframe bilanciato e non solo df_rain!
+    return df_balanced.iloc[::downsample_factor].reset_index(drop=True)
 
 
 

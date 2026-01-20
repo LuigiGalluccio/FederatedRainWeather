@@ -24,13 +24,13 @@ fl.server.start_server(
     server_address="0.0.0.0:8081",
     config=fl.server.ServerConfig(num_rounds=rounds),
     strategy=FedProx(
-        fraction_fit=0.6,
-        fraction_evaluate=0.6,
+        fraction_fit=1.0,
+        fraction_evaluate=1.0,
         min_fit_clients=4,
         min_evaluate_clients=4,
         min_available_clients=4,
         fit_metrics_aggregation_fn=weighted_average,
         evaluate_metrics_aggregation_fn=weighted_average,
-        proximal_mu=0.6
+        proximal_mu=0.1
     ),
 )

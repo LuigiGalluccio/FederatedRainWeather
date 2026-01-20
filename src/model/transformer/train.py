@@ -8,36 +8,53 @@ import os
 import sys
 import pandas as pd
 import logging as log
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import glob
-from dataset import load_weather_data, WeatherDataset, preprocess_weather_data
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
+# Import personalizzati
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../utils')))
 from logger import Logger
-from dataset import Dataset
+from dataset import load_weather_data, preprocess_weather_data, WeatherDataset
 from model import myTransformer
 
 def load_config(config_path="config.yaml"):
-    """load YAML config file."""
+    """Carica il file di configurazione YAML."""
     with open(config_path, "r") as file:
         return yaml.safe_load(file)
+
+def get_global_preprocessed_df(config):
+    """
+    Carica tutte le stazioni specificate, le unisce e applica 
+    il preprocessing globale (Seno/Coseno + Normalizzazione).
+    """
+    stations = [1, 3, 4, 5]
+    dfs = []
     
-# df_10min = load_weather_data(base_path="../../../data/storage/vantage-pro-ws1/2025", downsample_factor=60, station_id=1)
-# print(df_10min)
-stations = [1, 3, 4, 5]
-dfs = []
+    for s in stations:
+        # Nota: assicurati che il path sia corretto rispetto alla posizione di train.py
+        path = f"../../../data/storage/vantage-pro-ws{s}/2025"
+        try:
+            df_s = load_weather_data(base_path=path, downsample_factor=60, station_id=s)
+            dfs.append(df_s)
+            print(f"Loaded station {s}, shape: {df_s.shape}")
+        except Exception as e:
+            print(f"Errore nel caricamento della stazione {s}: {e}")
 
-for s in stations:
-    path = f"../../../data/storage/vantage-pro-ws{s}/2025"
-    dfs.append(load_weather_data(base_path=path, downsample_factor=60, station_id=s))
-    print(f"Loaded data for station {s}, shape: {dfs[-1].shape}")
+    if not dfs:
+        raise ValueError("Nessun dato caricato. Controlla i path delle stazioni.")
 
-df_raw = pd.concat(dfs, axis=0).reset_index(drop=True)
-df_10min, scaler = preprocess_weather_data(df_raw)
+    df_raw = pd.concat(dfs, axis=0).reset_index(drop=True)
+    
+    # Applichiamo preprocessing globale (WindDir -> Sin/Cos e StandardScaler)
+    df_normalized, scaler = preprocess_weather_data(df_raw)
+    return df_normalized, scaler
 
-print(df_10min.head())
-
-def load_data(config):
+def load_data_client(config, place_id, df_full=None):
+    """
+    Carica i loader per un singolo client (stazione) partendo dal DF globale.
+    """
+    if df_full is None:
+        df_full, _ = get_global_preprocessed_df(config)
 
     input_window = config['data']['input_window']
     output_window = config['data']['output_window']
@@ -45,58 +62,29 @@ def load_data(config):
     target_cols = config['data']['target_cols']
     batch_size = config['training']['batch_size']
 
-    print(input_window, output_window, feature_cols, target_cols)
+    # Filtro per stazione specifica
+    df_place = df_full[df_full['station_id'] == place_id].sort_values('Datetime').reset_index(drop=True)
 
-    dataset = WeatherDataset(
-        df=df_10min,
-        input_window=input_window,
-        output_window=output_window,
-        feature_cols=feature_cols,
-        target_cols=target_cols
-    )   
+    total_len = len(df_place)
+    total_len = len(df_place)
+    print(f"DEBUG: Stazione {place_id} ha {total_len} righe totali dopo il preprocessing.")
+    if total_len == 0:
+        print(f"ERRORE: La stazione {place_id} è VUOTA! Forse non ci sono dati di pioggia?")
+        # Gestisci l'errore o salta la stazione
+    train_end = int(0.7 * total_len)
+    val_end = int(0.85 * total_len)
 
-    # print(len(dataset))
-    total_len = len(dataset)
+    train_ds = WeatherDataset(df_place, input_window, output_window, feature_cols, target_cols, 0, train_end)
+    val_ds = WeatherDataset(df_place, input_window, output_window, feature_cols, target_cols, train_end, val_end)
+    test_ds = WeatherDataset(df_place, input_window, output_window, feature_cols, target_cols, val_end)
 
-    train_end = int(0.8 * total_len)
-    val_end = int(0.9 * total_len)
-
-    train_dataset = WeatherDataset(
-        df=df_10min,
-        input_window=input_window,
-        output_window=output_window,
-        feature_cols=feature_cols,
-        target_cols=target_cols,
-        start_idx=0,
-        end_idx=train_end
-    )
-    val_dataset = WeatherDataset(
-        df=df_10min,
-        input_window=input_window,
-        output_window=output_window,
-        feature_cols=feature_cols,
-        target_cols=target_cols,
-        start_idx=train_end, 
-        end_idx=val_end
-    )
-    test_dataset = WeatherDataset(
-        df=df_10min,
-        input_window=input_window,
-        output_window=output_window,
-        feature_cols=feature_cols,
-        target_cols=target_cols,
-        start_idx=val_end
-    )
-
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=False)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
+    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
 
     return train_loader, val_loader, test_loader
 
-
 def build_model(config, device):
-  
     feature_cols = config['data']['feature_cols']
     target_cols = config['data']['target_cols']
 
@@ -106,135 +94,83 @@ def build_model(config, device):
         input_window=config['data']['input_window'],
         output_window=config['data']['output_window']
     ).to(device)
-
     return model
 
-
-
 def train(model, train_loader, criterion, optimizer, device, output_window, feature_dim):
-
     model.train()
     epoch_loss = 0.0
-
     for x, y in train_loader:
         x, y = x.to(device), y.to(device)
-
-        # Decoder input: shape [B, T_out, feature_dim]
-
         pred = model(x)
         loss = criterion(pred, y)
-
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-
         epoch_loss += loss.item()
-
     return epoch_loss / len(train_loader)
 
 def validate(model, val_loader, criterion, device, output_window, feature_dim):
-
     model.eval()
     val_loss = 0.0
-
     with torch.no_grad():
         for x, y in val_loader:
             x, y = x.to(device), y.to(device)
-
             pred = model(x)
-
             loss = criterion(pred, y)
             val_loss += loss.item()
-
     return val_loss / len(val_loader)
 
-
-def evaluate(model, test_loader, device, output_window, feature_dim, target_cols):
-
+def evaluate(model, test_loader, device, output_window, feature_cols, target_cols):
     model.eval()
     all_preds, all_targets = [], []
-
     with torch.no_grad():
         for x, y in test_loader:
             x, y = x.to(device), y.to(device)
-
             pred = model(x)
-
             all_preds.append(pred.cpu().numpy())
             all_targets.append(y.cpu().numpy())
 
-    all_preds = np.concatenate(all_preds, axis=0)      # [B, T_out, n_targets]
-    all_targets = np.concatenate(all_targets, axis=0)  # [B, T_out, n_targets]
+    all_preds = np.concatenate(all_preds, axis=0)
+    all_targets = np.concatenate(all_targets, axis=0)
 
     results = []
     for i, target_name in enumerate(target_cols):
         preds_flat = all_preds[:, :, i].reshape(-1)
         targets_flat = all_targets[:, :, i].reshape(-1)
-
         mae = mean_absolute_error(targets_flat, preds_flat)
-        rmse = mean_squared_error(targets_flat, preds_flat) ** 0.5
-        r2score_val = r2_score(targets_flat, preds_flat)
-
-        results.append((target_name, mae, rmse, r2score_val))
-
+        rmse = np.sqrt(mean_squared_error(targets_flat, preds_flat))
+        r2 = r2_score(targets_flat, preds_flat)
+        results.append((target_name, mae, rmse, r2))
     return results
-
 
 def main():     
     config = load_config("config.yaml")
-    log = Logger()
+    logger = Logger()
 
-    lr = config['training']['learning_rate']
-    epochs = config['training']['epochs']
+    # Caricamento centralizzato per test
+    df_10min, scaler = get_global_preprocessed_df(config)
+    
     device = torch.device(config['training']['device'])
-    batch_size = config['training']['batch_size']
-    input_window = config['data']['input_window']
-    output_window = config['data']['output_window']
     feature_cols = config['data']['feature_cols']
     target_cols = config['data']['target_cols']
-    train_loader, val_loader, test_loader = load_data(config)
-    feature_dim = len(feature_cols)
+    
+    # Per il training centralizzato usiamo una stazione come esempio o tutte
+    # Qui usiamo la logica client per caricare i dati della stazione 1
+    train_loader, val_loader, test_loader = load_data_client(config, place_id=1, df_full=df_10min)
+    
     model = build_model(config, device)
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
+    optimizer = optim.Adam(model.parameters(), lr=config['training']['learning_rate'], weight_decay=1e-4)
 
-        
-    log.info("TRANSFORMER HYPER-PARAMETERS:")
-    log.info(f'Learning rate: {lr}')
-    log.info(f'Epochs: {epochs}')
-    log.info(f'Device: {device}')
-    log.info(f'Batch size: {batch_size}')
-    log.info(f'Feature cols ({len(feature_cols)}): {feature_cols}')
-    log.info(f'Target cols ({len(target_cols)}): {target_cols}\n')
+    logger.info("Starting Centralized Training (Station 1 Example)...")
+    for epoch in range(config['training']['epochs']):
+        t_loss = train(model, train_loader, criterion, optimizer, device, config['data']['output_window'], len(feature_cols))
+        v_loss = validate(model, val_loader, criterion, device, config['data']['output_window'], len(feature_cols))
+        logger.info(f"Epoch {epoch+1}, Train Loss: {t_loss:.4f}, Val Loss: {v_loss:.4f}")
 
-        # Training loop
-    for epoch in range(epochs):
-        train_loss = train(
-            model, train_loader, criterion, optimizer,
-            device, output_window, feature_dim
-        )
-        val_loss = validate(
-            model, val_loader, criterion,
-            device, output_window, feature_dim
-        )
-
-        log.info(
-            f"Epoch {epoch+1}/{epochs}, "
-            f"Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}"
-        )
-
-    results = evaluate(
-        model, test_loader, device,
-        output_window, feature_dim, target_cols
-    )
-
-    log.info("\nValutazione finale:")
+    results = evaluate(model, test_loader, device, config['data']['output_window'], feature_cols, target_cols)
     for name, mae, rmse, r2 in results:
-        log.info(f"MAE ({name}): {mae:.4f}")
-        log.info(f"RMSE ({name}): {rmse:.4f}")
-        log.info(f"R2 SCORE ({name}): {r2:.4f}")
-
-
+        logger.info(f"Results for {name}: MAE={mae:.4f}, RMSE={rmse:.4f}, R2={r2:.4f}")
 
 if __name__ == "__main__":
     main()
