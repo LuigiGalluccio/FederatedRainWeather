@@ -3,101 +3,90 @@ from torch.utils.data import DataLoader
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-import pandas as pd
 import yaml
 import os
-import logging as log
 import sys
+import pandas as pd
+import logging as log
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+import glob
+from dataset2 import WeatherDataset, load_weather_data
 
-# === PATHS ===
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../utils')))
 from logger import Logger
 from dataset import Dataset
 from model import myTransformer
 
-
 def load_config(config_path="config.yaml"):
-    """Carica il file di configurazione YAML."""
+    """load YAML config file."""
     with open(config_path, "r") as file:
         return yaml.safe_load(file)
+    
+# df_10min = load_weather_data(base_path="../../../data/storage/vantage-pro-ws1/2025", downsample_factor=60, station_id=1)
+
+stations = [1, 3, 4, 5]
+dfs = []
+
+for s in stations:
+    path = f"../../../data/storage/vantage-pro-ws{s}/2025"
+    dfs.append(load_weather_data(base_path=path, downsample_factor=60, station_id=s))
+    print(f"Loaded data for station {s}, shape: {dfs[-1].shape}")
+
+df_10min = pd.concat(dfs, axis=0)
 
 
 def load_data(config):
 
-    csv_path = config['data']['csv_path']
     input_window = config['data']['input_window']
     output_window = config['data']['output_window']
     feature_cols = config['data']['feature_cols']
     target_cols = config['data']['target_cols']
     batch_size = config['training']['batch_size']
 
-    # Dataset completo per stimare la lunghezza totale
-    full_dataset = Dataset(csv_path, input_window, output_window, feature_cols, target_cols)
-    total_len = len(full_dataset.data)
+    print(input_window, output_window, feature_cols, target_cols)
+
+    dataset = WeatherDataset(
+        df=df_10min,
+        input_window=input_window,
+        output_window=output_window,
+        feature_cols=feature_cols,
+        target_cols=target_cols
+    )   
+
+    # print(len(dataset))
+    total_len = len(dataset)
 
     train_end = int(0.8 * total_len)
     val_end = int(0.9 * total_len)
 
-    # 80-10-10
-    train_dataset = Dataset(
-        csv_path, input_window, output_window,
-        feature_cols, target_cols,
-        start_idx=0, end_idx=train_end
+    train_dataset = WeatherDataset(
+        df=df_10min,
+        input_window=input_window,
+        output_window=output_window,
+        feature_cols=feature_cols,
+        target_cols=target_cols,
+        start_idx=0,
+        end_idx=train_end
     )
-    val_dataset = Dataset(
-        csv_path, input_window, output_window,
-        feature_cols, target_cols,
-        start_idx=train_end, end_idx=val_end
+    val_dataset = WeatherDataset(
+        df=df_10min,
+        input_window=input_window,
+        output_window=output_window,
+        feature_cols=feature_cols,
+        target_cols=target_cols,
+        start_idx=train_end, 
+        end_idx=val_end
     )
-    test_dataset = Dataset(
-        csv_path, input_window, output_window,
-        feature_cols, target_cols,
+    test_dataset = WeatherDataset(
+        df=df_10min,
+        input_window=input_window,
+        output_window=output_window,
+        feature_cols=feature_cols,
+        target_cols=target_cols,
         start_idx=val_end
     )
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-
-    return train_loader, val_loader, test_loader
-
-
-def load_data_client(config, place_id):
-
-    csv_path = config['data']['csv_path']
-    input_window = config['data']['input_window']
-    output_window = config['data']['output_window']
-    feature_cols = config['data']['feature_cols']
-    target_cols = config['data']['target_cols']
-    batch_size = config['training']['batch_size']
-
-    df = pd.read_csv(csv_path, parse_dates=['datetime'])
-    df_place = df[df['station_id'] == place_id].sort_values('datetime')
-
-    log.info(f"[CLIENT {place_id}] -> LOADED {len(df_place)} ROWS FOR STATION_ID={place_id}")
-
-    total_len = len(df_place)
-    train_end = int(0.7 * total_len)
-    val_end = int(0.85 * total_len)
-
-    train_dataset = Dataset(
-        df_place, input_window, output_window,
-        feature_cols, target_cols,
-        start_idx=0, end_idx=train_end
-    )
-    val_dataset = Dataset(
-        df_place, input_window, output_window,
-        feature_cols, target_cols,
-        start_idx=train_end, end_idx=val_end
-    )
-    test_dataset = Dataset(
-        df_place, input_window, output_window,
-        feature_cols, target_cols,
-        start_idx=val_end
-    )
-
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
@@ -111,10 +100,13 @@ def build_model(config, device):
 
     model = myTransformer(
         input_dim=len(feature_cols),
-        output_dim=len(target_cols)
+        output_dim=len(target_cols),
+        input_window=config['data']['input_window'],
+        output_window=config['data']['output_window']
     ).to(device)
 
     return model
+
 
 
 def train(model, train_loader, criterion, optimizer, device, output_window, feature_dim):
@@ -126,9 +118,8 @@ def train(model, train_loader, criterion, optimizer, device, output_window, feat
         x, y = x.to(device), y.to(device)
 
         # Decoder input: shape [B, T_out, feature_dim]
-        tgt_in = torch.zeros((x.size(0), output_window, feature_dim), device=x.device)
 
-        pred = model(x, tgt_in)
+        pred = model(x)
         loss = criterion(pred, y)
 
         optimizer.zero_grad()
@@ -139,7 +130,6 @@ def train(model, train_loader, criterion, optimizer, device, output_window, feat
 
     return epoch_loss / len(train_loader)
 
-
 def validate(model, val_loader, criterion, device, output_window, feature_dim):
 
     model.eval()
@@ -149,8 +139,7 @@ def validate(model, val_loader, criterion, device, output_window, feature_dim):
         for x, y in val_loader:
             x, y = x.to(device), y.to(device)
 
-            tgt_in = torch.zeros((x.size(0), output_window, feature_dim), device=x.device)
-            pred = model(x, tgt_in)
+            pred = model(x)
 
             loss = criterion(pred, y)
             val_loss += loss.item()
@@ -167,8 +156,7 @@ def evaluate(model, test_loader, device, output_window, feature_dim, target_cols
         for x, y in test_loader:
             x, y = x.to(device), y.to(device)
 
-            tgt_in = torch.zeros((x.size(0), output_window, feature_dim), device=x.device)
-            pred = model(x, tgt_in)
+            pred = model(x)
 
             all_preds.append(pred.cpu().numpy())
             all_targets.append(y.cpu().numpy())
@@ -190,21 +178,25 @@ def evaluate(model, test_loader, device, output_window, feature_dim, target_cols
     return results
 
 
-def main():
-    config = load_config()
+def main():     
+    config = load_config("config.yaml")
     log = Logger()
 
     lr = config['training']['learning_rate']
     epochs = config['training']['epochs']
     device = torch.device(config['training']['device'])
     batch_size = config['training']['batch_size']
-
+    input_window = config['data']['input_window']
+    output_window = config['data']['output_window']
     feature_cols = config['data']['feature_cols']
     target_cols = config['data']['target_cols']
-    output_window = config['data']['output_window']
-
+    train_loader, val_loader, test_loader = load_data(config)
     feature_dim = len(feature_cols)
+    model = build_model(config, device)
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
 
+        
     log.info("TRANSFORMER HYPER-PARAMETERS:")
     log.info(f'Learning rate: {lr}')
     log.info(f'Epochs: {epochs}')
@@ -213,16 +205,7 @@ def main():
     log.info(f'Feature cols ({len(feature_cols)}): {feature_cols}')
     log.info(f'Target cols ({len(target_cols)}): {target_cols}\n')
 
-    # Data
-    train_loader, val_loader, test_loader = load_data(config)
-
-    model = build_model(config, device)
-
-    # Loss & optimizer
-    criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
-
-    # Training loop
+        # Training loop
     for epoch in range(epochs):
         train_loss = train(
             model, train_loader, criterion, optimizer,
@@ -248,6 +231,7 @@ def main():
         log.info(f"MAE ({name}): {mae:.4f}")
         log.info(f"RMSE ({name}): {rmse:.4f}")
         log.info(f"R2 SCORE ({name}): {r2:.4f}")
+
 
 
 if __name__ == "__main__":
