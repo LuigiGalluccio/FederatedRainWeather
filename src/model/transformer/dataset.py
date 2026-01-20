@@ -125,7 +125,16 @@ def load_weather_data(base_path="storage/vantage-pro/2025", downsample_factor=60
     full_df = full_df.sort_values('Datetime').reset_index(drop=True)
 
     # Filtra solo righe con pioggia
-    df_rain = full_df[full_df['RainRate'] > 0].reset_index(drop=True)
+    # df_rain = full_df[full_df['RainRate'] > 0].reset_index(drop=True)
+    full_df['RainRate'] = full_df['RainRate'].clip(lower=0.0)
+    full_df['RainRate'] = full_df['RainRate'].apply(lambda x: 0 if x < 0.1 else x)
+    full_df['RainRate'] = np.log1p(full_df['RainRate'])
+
+    df_zero = full_df[full_df['RainRate'] == 0].sample(frac=0.33)
+    df_rain = full_df[full_df['RainRate'] > 0]
+    full_df = pd.concat([df_zero, df_rain]).sort_values('Datetime')
+
+
 
     # Downsampling ogni 'downsample_factor' righe (10 minuti)
     return df_rain.iloc[::downsample_factor].reset_index(drop=True)
@@ -143,7 +152,7 @@ def preprocess_weather_data(df,scaler=None):
 
     cols_to_normalize = [
         'Barometer', 'TempIn', 'HumIn', 'TempOut', 
-        'WindSpeed', 'HumOut', 'WindDir_sin', 'WindDir_cos','RainRate'
+        'WindSpeed', 'HumOut', 'WindDir_sin', 'WindDir_cos'
     ]
 
     if scaler is None:
