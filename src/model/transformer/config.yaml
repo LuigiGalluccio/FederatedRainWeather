@@ -2,16 +2,11 @@
 data:
   csv_path: "../../../data/processed_data/dataset.csv"
   feature_cols:
-    - Barometer
-    - TempIn
-    - HumIn
-    - TempOut
-    - WindSpeed
-    - HumOut
-    - WindDir_sin
-    - WindDir_cos
+    - barometer
+    - temperature
+    - wind_speed
   target_cols:
-    - RainRate
+    - rain_rate
   input_window: 24 # steps
   output_window: 6 # steps
 

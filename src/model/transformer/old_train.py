@@ -7,49 +7,76 @@ import yaml
 import os
 import sys
 import pandas as pd
+import logging as log
+import glob
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 # Import personalizzati
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../utils')))
 from logger import Logger
-from dataset import WeatherDataset # Importati solo quelli necessari
+from dataset import load_weather_data, preprocess_weather_data, WeatherDataset
 from model import myTransformer
 
 def load_config(config_path="config.yaml"):
+    """Carica il file di configurazione YAML."""
     with open(config_path, "r") as file:
         return yaml.safe_load(file)
 
-def get_single_file_df(file_path):
-    # Caricamento con separatore ';' basato sul tuo esempio
-    df = pd.read_csv(file_path, sep=';')
+def get_global_preprocessed_df(config):
+    """
+    Carica tutte le stazioni specificate, le unisce e applica 
+    il preprocessing globale (Seno/Coseno + Normalizzazione).
+    """
+    stations = [1, 3, 4, 5]
+    dfs = []
     
-    if 'datetime' in df.columns:
-        df['datetime'] = pd.to_datetime(df['datetime'])
-    
-    print(f"File caricato: {file_path} | Righe: {len(df)}")
-    return df
+    for s in stations:
+        # Nota: assicurati che il path sia corretto rispetto alla posizione di train.py
+        path = f"../../../data/storage/vantage-pro-ws{s}/2025"
+        try:
+            df_s = load_weather_data(base_path=path, downsample_factor=60, station_id=s)
+            dfs.append(df_s)
+            print(f"Loaded station {s}, shape: {df_s.shape}")
+        except Exception as e:
+            print(f"Errore nel caricamento della stazione {s}: {e}")
 
-def load_data_client(config, place_id, df_full):
+    if not dfs:
+        raise ValueError("Nessun dato caricato. Controlla i path delle stazioni.")
+
+    df_raw = pd.concat(dfs, axis=0).reset_index(drop=True)
+    
+    # Applichiamo preprocessing globale (WindDir -> Sin/Cos e StandardScaler)
+    df_normalized, scaler = preprocess_weather_data(df_raw)
+    return df_normalized, scaler
+
+def load_data_client(config, place_id, df_full=None):
+    """
+    Carica i loader per un singolo client (stazione) partendo dal DF globale.
+    """
+    if df_full is None:
+        df_full, _ = get_global_preprocessed_df(config)
+
     input_window = config['data']['input_window']
     output_window = config['data']['output_window']
     feature_cols = config['data']['feature_cols']
     target_cols = config['data']['target_cols']
     batch_size = config['training']['batch_size']
 
-    # Filtro e ordinamento
-    df_station = df_full[df_full['station_id'] == place_id].sort_values('datetime').reset_index(drop=True)
+    # Filtro per stazione specifica
+    df_place = df_full[df_full['station_id'] == place_id].sort_values('Datetime').reset_index(drop=True)
 
-    if df_station.empty:
-        return None, None, None
-
-    total_len = len(df_station)
-    print(f"DEBUG: Stazione {place_id} ha {total_len} righe totali.")
+    total_len = len(df_place)
+    total_len = len(df_place)
+    print(f"DEBUG: Stazione {place_id} ha {total_len} righe totali dopo il preprocessing.")
+    if total_len == 0:
+        print(f"ERRORE: La stazione {place_id} è VUOTA! Forse non ci sono dati di pioggia?")
+        # Gestisci l'errore o salta la stazione
     train_end = int(0.7 * total_len)
     val_end = int(0.85 * total_len)
 
-    train_ds = WeatherDataset(df_station, input_window, output_window, feature_cols, target_cols, 0, train_end)
-    val_ds = WeatherDataset(df_station, input_window, output_window, feature_cols, target_cols, train_end, val_end)
-    test_ds = WeatherDataset(df_station, input_window, output_window, feature_cols, target_cols, val_end)
+    train_ds = WeatherDataset(df_place, input_window, output_window, feature_cols, target_cols, 0, train_end)
+    val_ds = WeatherDataset(df_place, input_window, output_window, feature_cols, target_cols, train_end, val_end)
+    test_ds = WeatherDataset(df_place, input_window, output_window, feature_cols, target_cols, val_end)
 
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=False)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
@@ -122,33 +149,26 @@ def main():
     config = load_config("config.yaml")
     logger = Logger()
 
-    # Percorso del file unico
-    file_path = "../../../data/events_dataset_scaled.csv"
-    df_final = get_single_file_df(file_path)
+    # Caricamento centralizzato per test
+    df_10min, scaler = get_global_preprocessed_df(config)
     
     device = torch.device(config['training']['device'])
     feature_cols = config['data']['feature_cols']
     target_cols = config['data']['target_cols']
     
-    # Esempio su stazione 1
-    # target_id = 1
-    # train_loader, val_loader, test_loader = load_data_client(config, target_id, df_final)
+    # Per il training centralizzato usiamo una stazione come esempio o tutte
+    # Qui usiamo la logica client per caricare i dati della stazione 1
+    train_loader, val_loader, test_loader = load_data_client(config, place_id=1, df_full=df_10min)
     
-    # if train_loader is None:
-    #     logger.error(f"Dati non trovati per la stazione {target_id}")
-    #     return
-
-    train_loader, val_loader, test_loader = load_data_client(config, place_id=1, df_full=df_final)
-
     model = build_model(config, device)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=config['training']['learning_rate'], weight_decay=1e-4)
 
-
+    logger.info("Starting Centralized Training (Station 1 Example)...")
     for epoch in range(config['training']['epochs']):
-        train_loss = train(model, train_loader, criterion, optimizer, device, config['data']['output_window'], len(feature_cols))
-        val_loss = validate(model, val_loader, criterion, device, config['data']['output_window'], len(feature_cols))
-        logger.info(f"Epoch {epoch+1}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
+        t_loss = train(model, train_loader, criterion, optimizer, device, config['data']['output_window'], len(feature_cols))
+        v_loss = validate(model, val_loader, criterion, device, config['data']['output_window'], len(feature_cols))
+        logger.info(f"Epoch {epoch+1}, Train Loss: {t_loss:.4f}, Val Loss: {v_loss:.4f}")
 
     results = evaluate(model, test_loader, device, config['data']['output_window'], feature_cols, target_cols)
     for name, mae, rmse, r2 in results:

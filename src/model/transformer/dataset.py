@@ -96,64 +96,42 @@ class WeatherDataset(Dataset):
 
 
 
-def load_weather_data(base_path="storage/vantage-pro/2025", downsample_factor=60, station_id=None):
-    month_folders = sorted(glob.glob(os.path.join(base_path, "*")))
-    all_dfs = []
+# def load_weather_data(base_path="storage/vantage-pro/2025", downsample_factor=60, station_id=None):
+#     month_folders = sorted(glob.glob(os.path.join(base_path, "*")))
+#     all_dfs = []
 
-    for month_folder in month_folders:
-        csv_files = sorted(glob.glob(os.path.join(month_folder, "*.csv")))
-        if not csv_files: continue
-        for csv_file in csv_files:
-            all_dfs.append(pd.read_csv(csv_file))
+#     for month_folder in month_folders:
+#         csv_files = sorted(glob.glob(os.path.join(month_folder, "*.csv")))
+#         if not csv_files: continue
+#         for csv_file in csv_files:
+#             all_dfs.append(pd.read_csv(csv_file))
 
-    if not all_dfs:
-        raise ValueError("Nessun CSV trovato!")
+#     if not all_dfs:
+#         raise ValueError("Nessun CSV trovato!")
 
-    df = pd.concat(all_dfs, ignore_index=True)
-    df['Datetime'] = pd.to_datetime(df['Datetime'])
-    if station_id is not None:
-        df["station_id"] = station_id
+#     df = pd.concat(all_dfs, ignore_index=True)
+#     df['Datetime'] = pd.to_datetime(df['Datetime'])
+#     if station_id is not None:
+#         df["station_id"] = station_id
         
-    df = df.sort_values('Datetime').reset_index(drop=True)
+#     df = df.sort_values('Datetime').reset_index(drop=True)
 
-    # 1. Pulizia e Log-Transform
-    df['RainRate'] = df['RainRate'].clip(lower=0.0)
-    # Applichiamo una soglia di rumore (es. 0.1 mm/h)
-    df['RainRate'] = df['RainRate'].apply(lambda x: 0.0 if x < 0.1 else x)
-    # Log-transform: schiaccia i valori alti e riduce la varianza della Loss
-    df['RainRate'] = np.log1p(df['RainRate'])
+#     # 1. Pulizia e Log-Transform
+#     df['RainRate'] = df['RainRate'].clip(lower=0.0)
+#     # Applichiamo una soglia di rumore (es. 0.1 mm/h)
+#     df['RainRate'] = df['RainRate'].apply(lambda x: 0.0 if x < 0.1 else x)
+#     # Log-transform: schiaccia i valori alti e riduce la varianza della Loss
+#     df['RainRate'] = np.log1p(df['RainRate'])
 
-    # 2. Bilanciamento Classi (Sottocampionamento degli zeri)
-    df_zero = df[df['RainRate'] == 0].sample(frac=0.33, random_state=42)
-    df_rain = df[df['RainRate'] > 0]
+#     # 2. Bilanciamento Classi (Sottocampionamento degli zeri)
+#     df_zero = df[df['RainRate'] == 0].sample(frac=0.33, random_state=42)
+#     df_rain = df[df['RainRate'] > 0]
     
-    # Uniamo e riordiniamo per tempo (fondamentale per i Transformer)
-    df_balanced = pd.concat([df_zero, df_rain]).sort_values('Datetime')
+#     # Uniamo e riordiniamo per tempo (fondamentale per i Transformer)
+#     df_balanced = pd.concat([df_zero, df_rain]).sort_values('Datetime')
 
-    # 3. Downsampling 
-    # Usiamo il dataframe bilanciato e non solo df_rain!
-    return df_balanced.iloc[::downsample_factor].reset_index(drop=True)
+#     # 3. Downsampling 
+#     # Usiamo il dataframe bilanciato e non solo df_rain!
+#     return df_balanced.iloc[::downsample_factor].reset_index(drop=True)
 
 
-
-def preprocess_weather_data(df,scaler=None):
-
-    df = df.copy()
-
-    wind_rad = df['WindDir'] * np.pi / 180.0
-    df['WindDir_sin'] = np.sin(wind_rad)
-    df['WindDir_cos'] = np.cos(wind_rad)
-    df = df.drop(columns=['WindDir'])
-
-    cols_to_normalize = [
-        'Barometer', 'TempIn', 'HumIn', 'TempOut', 
-        'WindSpeed', 'HumOut', 'WindDir_sin', 'WindDir_cos'
-    ]
-
-    if scaler is None:
-        scaler = StandardScaler()
-        df[cols_to_normalize] = scaler.fit_transform(df[cols_to_normalize])
-    else:
-        df[cols_to_normalize] = scaler.transform(df[cols_to_normalize]) 
-
-    return df, scaler
