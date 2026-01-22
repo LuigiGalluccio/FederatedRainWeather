@@ -100,7 +100,9 @@ def train(model, train_loader, criterion, optimizer, device, output_window, feat
         
         # 3. Definiamo i pesi: diamo più importanza ai momenti in cui piove (y > 0)
         # Esempio: se piove il peso è 5, se è asciutto il peso è 1
-        weights = torch.where(y > 0.0, 20.0, 1.0).to(device)
+        # weights = torch.where(y > 0.0, 20.0, 1.0).to(device)
+        weights = torch.where(y > 0.0, 2.0, 1.0).to(device)
+
         
         # 4. Applichiamo i pesi e facciamo la media finale
         loss = (loss_elements * weights).mean()

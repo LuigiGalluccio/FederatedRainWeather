@@ -6,6 +6,10 @@ data:
     - temperature
     - wind_speed
     - rain_rate
+    - hour_sin
+    - hour_cos
+    - month_sin
+    - month_cos
   target_cols:
     - rain_rate
   input_window: 12 # steps
@@ -13,15 +17,15 @@ data:
 
 training:
   batch_size: 16
-  learning_rate: 0.001
-  epochs: 20
+  learning_rate: 0.0003
+  epochs: 5
   device: "cpu"
-  rounds: 25
+  rounds: 75
 
 model:
-  input_dim: 6 
+  input_dim: 8
   output_dim: 1           
-  d_model: 64             
+  d_model: 128           
   nhead: 4
-  num_layers: 2
-  dropout: 0.1
+  num_layers: 4
+  dropout: 0.25
