@@ -5,6 +5,7 @@ import torch.optim as optim
 import numpy as np
 import yaml
 import os
+from scipy.stats import pearsonr
 import sys
 import pandas as pd
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
@@ -71,18 +72,51 @@ def build_model(config, device):
     ).to(device)
     return model
 
+# def train(model, train_loader, criterion, optimizer, device, output_window, feature_dim):
+#     model.train()
+#     epoch_loss = 0.0
+#     for x, y in train_loader:
+#         x, y = x.to(device), y.to(device)
+#         pred = model(x)
+#         loss = criterion(pred, y)
+#         optimizer.zero_grad()
+#         loss.backward()
+#         optimizer.step()
+#         epoch_loss += loss.item()
+#     return epoch_loss / len(train_loader)
+
 def train(model, train_loader, criterion, optimizer, device, output_window, feature_dim):
     model.train()
     epoch_loss = 0.0
     for x, y in train_loader:
         x, y = x.to(device), y.to(device)
+        
+        # 1. Calcolo della predizione
         pred = model(x)
-        loss = criterion(pred, y)
+        
+        # 2. Calcolo della loss "punto per punto" (senza riduzione)
+        # Assicurati che nel Client il criterio sia: nn.HuberLoss(reduction='none')
+        loss_elements = criterion(pred, y)
+        
+        # 3. Definiamo i pesi: diamo più importanza ai momenti in cui piove (y > 0)
+        # Esempio: se piove il peso è 5, se è asciutto il peso è 1
+        weights = torch.where(y > 0.0, 20.0, 1.0).to(device)
+        
+        # 4. Applichiamo i pesi e facciamo la media finale
+        loss = (loss_elements * weights).mean()
+        
+        # 5. Backpropagation standard con Gradient Clipping
         optimizer.zero_grad()
         loss.backward()
+        
+        # Clipping per evitare che il Transformer "impazzisca" con i pesi alti
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        
         optimizer.step()
         epoch_loss += loss.item()
+        
     return epoch_loss / len(train_loader)
+
 
 def validate(model, val_loader, criterion, device, output_window, feature_dim):
     model.eval()
@@ -90,10 +124,32 @@ def validate(model, val_loader, criterion, device, output_window, feature_dim):
     with torch.no_grad():
         for x, y in val_loader:
             x, y = x.to(device), y.to(device)
+            
+            # 1. Predizione
             pred = model(x)
-            loss = criterion(pred, y)
+            
+            # 2. Loss punto per punto (assicurati che criterion abbia reduction='none')
+            loss_elements = criterion(pred, y)
+            
+            # 3. Applichiamo gli STESSI pesi del training per coerenza
+            # Questo ti permette di vedere se il modello migliora sui picchi
+            weights = torch.where(y > 0.0, 20.0, 1.0).to(device)
+            loss = (loss_elements * weights).mean()
+            
             val_loss += loss.item()
+            
     return val_loss / len(val_loader)
+
+# def validate(model, val_loader, criterion, device, output_window, feature_dim):
+#     model.eval()
+#     val_loss = 0.0
+#     with torch.no_grad():
+#         for x, y in val_loader:
+#             x, y = x.to(device), y.to(device)
+#             pred = model(x)
+#             loss = criterion(pred, y)
+#             val_loss += loss.item()
+#     return val_loss / len(val_loader)
 
 def evaluate(model, test_loader, device, output_window, feature_cols, target_cols):
     model.eval()
@@ -112,11 +168,45 @@ def evaluate(model, test_loader, device, output_window, feature_cols, target_col
     for i, target_name in enumerate(target_cols):
         preds_flat = all_preds[:, :, i].reshape(-1)
         targets_flat = all_targets[:, :, i].reshape(-1)
+        
+        # Metriche standard
         mae = mean_absolute_error(targets_flat, preds_flat)
         rmse = np.sqrt(mean_squared_error(targets_flat, preds_flat))
         r2 = r2_score(targets_flat, preds_flat)
-        results.append((target_name, mae, rmse, r2))
+        
+        # --- NUOVA METRICA: CORRELAZIONE DI PEARSON ---
+        # La correlazione ci dice se il modello "segue il trend" (sale quando piove)
+        if np.std(preds_flat) < 1e-6 or np.std(targets_flat) < 1e-6:
+            corr = 0.0 # Se uno dei due è costante, la correlazione è 0
+        else:
+            corr, _ = pearsonr(targets_flat, preds_flat)
+            
+        results.append((target_name, mae, rmse, r2, corr))
+        
     return results
+
+# def evaluate(model, test_loader, device, output_window, feature_cols, target_cols):
+#     model.eval()
+#     all_preds, all_targets = [], []
+#     with torch.no_grad():
+#         for x, y in test_loader:
+#             x, y = x.to(device), y.to(device)
+#             pred = model(x)
+#             all_preds.append(pred.cpu().numpy())
+#             all_targets.append(y.cpu().numpy())
+
+#     all_preds = np.concatenate(all_preds, axis=0)
+#     all_targets = np.concatenate(all_targets, axis=0)
+
+#     results = []
+#     for i, target_name in enumerate(target_cols):
+#         preds_flat = all_preds[:, :, i].reshape(-1)
+#         targets_flat = all_targets[:, :, i].reshape(-1)
+#         mae = mean_absolute_error(targets_flat, preds_flat)
+#         rmse = np.sqrt(mean_squared_error(targets_flat, preds_flat))
+#         r2 = r2_score(targets_flat, preds_flat)
+#         results.append((target_name, mae, rmse, r2))
+#     return results
 
 def main():     
     config = load_config("config.yaml")

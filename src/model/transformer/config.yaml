@@ -13,9 +13,9 @@ data:
 training:
   batch_size: 16
   learning_rate: 0.001
-  epochs: 25
+  epochs: 40
   device: "cpu"
-  rounds: 20
+  rounds: 50
 
 model:
   input_dim: 6 
