@@ -5,6 +5,7 @@ import logging
 from flwr.server.strategy.fedprox import FedProx
 from train import load_config
 import matplotlib.pyplot as plt
+  # funzione che costruisce il modello
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

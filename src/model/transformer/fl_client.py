@@ -42,6 +42,12 @@ class FLClient(fl.client.NumPyClient):
         self.output_window = config["data"]["output_window"]
         self.feature_cols = config["data"]["feature_cols"]
         self.target_cols = config["data"]["target_cols"]
+    
+    def save_final_model(self):
+        """Salva lo state_dict del modello locale finale in un file .pth"""
+        model_path = f"client_{self.place_id}_final_model.pth"
+        torch.save(self.model.state_dict(), model_path)
+        logger.info(f" [Client {self.place_id}] Modello finale salvato in {model_path}")
 
     def get_parameters(self, config=None):
         return [val.cpu().numpy() for _, val in self.model.state_dict().items()]
@@ -98,3 +104,4 @@ if __name__ == "__main__":
     
     client = FLClient(config, place_id)
     fl.client.start_client(server_address=server_address, client=client.to_client())
+    client.save_final_model()
