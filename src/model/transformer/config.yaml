@@ -5,17 +5,18 @@ data:
     - barometer
     - temperature
     - wind_speed
+    - rain_rate
   target_cols:
     - rain_rate
-  input_window: 24 # steps
+  input_window: 12 # steps
   output_window: 6 # steps
 
 training:
   batch_size: 16
   learning_rate: 0.001
-  epochs: 40
+  epochs: 20
   device: "cpu"
-  rounds: 50
+  rounds: 25
 
 model:
   input_dim: 6 

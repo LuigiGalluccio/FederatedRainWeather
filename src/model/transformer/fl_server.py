@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 logger.info("Starting Flower server...")
 config = load_config("config.yaml")
-rounds = 50
+rounds = config['training']['rounds']
 print(f"Configured for {rounds} rounds of federated learning.")
 
 def weighted_average(metrics):

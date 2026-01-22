@@ -241,8 +241,10 @@ def main():
         logger.info(f"Epoch {epoch+1}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
 
     results = evaluate(model, test_loader, device, config['data']['output_window'], feature_cols, target_cols)
-    for name, mae, rmse, r2 in results:
-        logger.info(f"Results for {name}: MAE={mae:.4f}, RMSE={rmse:.4f}, R2={r2:.4f}")
+    # for name, mae, rmse, r2 in results:
+    #     logger.info(f"Results for {name}: MAE={mae:.4f}, RMSE={rmse:.4f}, R2={r2:.4f}")
+    for name, mae, rmse, r2, corr in results:
+        logger.info(f"Results for {name}: MAE={mae:.4f}, RMSE={rmse:.4f}, R2={r2:.4f}, Corr={corr:.4f}")
 
 if __name__ == "__main__":
     main()

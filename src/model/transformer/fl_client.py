@@ -56,7 +56,7 @@ class FLClient(fl.client.NumPyClient):
         self.set_parameters(parameters)
         
         # Prendi le epoche dal config o usa un default
-        local_epochs = 3
+        local_epochs = self.config['training']['epochs']
         train_loss = 0.0
         
         logger.info(f" [Client {self.place_id}] Inizio Round - Training locale...")
